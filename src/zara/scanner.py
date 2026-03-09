@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import time
 
 import httpx
@@ -13,38 +14,68 @@ from zara.client import (
     get_product_category_ids,
     HEADERS,
 )
+from zara.notify import notify, notify_summary
 
 
-def run_scan() -> None:
+async def _fetch_one(
+    client: httpx.AsyncClient,
+    semaphore: asyncio.Semaphore,
+    cat_id: int,
+    cat_name: str,
+) -> list[Product]:
+    """Fetch products for one category, rate-limited by semaphore."""
+    async with semaphore:
+        products = await fetch_products_for_category(client, cat_id, cat_name)
+        await asyncio.sleep(config.REQUEST_DELAY)
+        return products
+
+
+async def run_scan() -> None:
     """Execute a full scan: fetch all products, filter by discount, and report in real-time."""
     threshold = config.DISCOUNT_THRESHOLD
-    logger.info("Starting Zara JP discount scan (threshold: >= {}% off)", threshold)
+    concurrency = config.CONCURRENCY
+    logger.info(
+        "Starting Zara JP discount scan (threshold: >= {}% off, concurrency: {})",
+        threshold,
+        concurrency,
+    )
 
-    with httpx.Client(
+    async with httpx.AsyncClient(
         headers=HEADERS, timeout=config.REQUEST_TIMEOUT, follow_redirects=True
     ) as client:
-        categories = fetch_categories(client)
+        categories = await fetch_categories(client)
         cat_ids = get_product_category_ids(categories)
         logger.info("Found {} product categories to scan", len(cat_ids))
 
         seen_ids: set[int] = set()
         total_products = 0
         total_hits = 0
+        scanned = 0
 
-        for i, (cat_id, cat_name) in enumerate(cat_ids):
-            products = fetch_products_for_category(client, cat_id, cat_name)
+        semaphore = asyncio.Semaphore(concurrency)
+
+        # Create all tasks upfront
+        tasks = {
+            asyncio.create_task(_fetch_one(client, semaphore, cat_id, cat_name)): (
+                cat_id,
+                cat_name,
+            )
+            for cat_id, cat_name in cat_ids
+        }
+
+        start = time.monotonic()
+
+        for coro in asyncio.as_completed(tasks):
+            products = await coro
+            scanned += 1
 
             # Deduplicate and check threshold immediately
-            new_products: list[Product] = []
             for p in products:
-                if p.id not in seen_ids:
-                    seen_ids.add(p.id)
-                    new_products.append(p)
+                if p.id in seen_ids:
+                    continue
+                seen_ids.add(p.id)
+                total_products += 1
 
-            total_products += len(new_products)
-
-            # Report discounted items for this category right away
-            for p in new_products:
                 if (
                     p.is_on_sale
                     and p.discount_pct is not None
@@ -60,15 +91,23 @@ def run_scan() -> None:
                         p.discount_pct,
                         p.url,
                     )
+                    await notify(p)
 
-            if (i + 1) % 50 == 0:
-                logger.info("Progress: {}/{} categories scanned", i + 1, len(cat_ids))
+            if scanned % 50 == 0:
+                elapsed = time.monotonic() - start
+                logger.info(
+                    "Progress: {}/{} categories scanned ({:.0f}s elapsed)",
+                    scanned,
+                    len(cat_ids),
+                    elapsed,
+                )
 
-            time.sleep(config.REQUEST_DELAY)
-
+        elapsed = time.monotonic() - start
         logger.info(
-            "Scan complete. {} unique products scanned, {} items matched threshold (>= {}% off)",
+            "Scan complete in {:.0f}s. {} unique products scanned, {} items matched threshold (>= {}% off)",
+            elapsed,
             total_products,
             total_hits,
             threshold,
         )
+        await notify_summary(total_products, total_hits, threshold)

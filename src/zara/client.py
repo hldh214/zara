@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import time
 from dataclasses import dataclass
 
 import httpx
@@ -19,6 +18,10 @@ HEADERS = {
 }
 
 
+# Width used when building resized image URLs (px)
+_IMAGE_WIDTH = 563
+
+
 @dataclass
 class Product:
     id: int
@@ -29,6 +32,7 @@ class Product:
     old_price: int | None
     discount_pct: int | None
     url: str
+    image_url: str
 
     @property
     def is_on_sale(self) -> bool:
@@ -39,11 +43,11 @@ class Product:
         )
 
 
-def fetch_categories(client: httpx.Client) -> list[dict]:
+async def fetch_categories(client: httpx.AsyncClient) -> list[dict]:
     """Fetch the full category tree from Zara JP."""
     url = f"{config.BASE_URL}/categories?ajax=true"
     logger.info("Fetching category tree...")
-    resp = client.get(url)
+    resp = await client.get(url)
     resp.raise_for_status()
     data = resp.json()
     return data.get("categories", [])
@@ -87,6 +91,30 @@ def _build_product_url(product: dict) -> str:
     if keyword and seo_id:
         return f"{config.BASE_URL}/{keyword}-p{seo_id}.html"
     return ""
+
+
+def _extract_image_url(comp: dict) -> str:
+    """Extract the primary product image URL from the first color's xmedia.
+
+    Prefers ``kind == "full"`` (the hero shot); falls back to the first
+    xmedia entry.  The ``url`` field contains a ``{width}`` placeholder
+    that we replace with a reasonable size for Telegram previews.
+    """
+    colors = comp.get("detail", {}).get("colors", [])
+    if not colors:
+        return ""
+
+    xmedia = colors[0].get("xmedia", [])
+    if not xmedia:
+        return ""
+
+    # Pick the main product image (kind == "full"), fall back to first
+    chosen = next((m for m in xmedia if m.get("kind") == "full"), xmedia[0])
+
+    url: str = chosen.get("url", "")
+    if url and "{width}" in url:
+        url = url.replace("{width}", str(_IMAGE_WIDTH))
+    return url
 
 
 def _parse_products_from_response(data: dict, category_name: str) -> list[Product]:
@@ -133,18 +161,19 @@ def _parse_products_from_response(data: dict, category_name: str) -> list[Produc
                         old_price=old_price,
                         discount_pct=discount_pct,
                         url=_build_product_url(comp),
+                        image_url=_extract_image_url(comp),
                     )
                 )
     return products
 
 
-def fetch_products_for_category(
-    client: httpx.Client, category_id: int, category_name: str
+async def fetch_products_for_category(
+    client: httpx.AsyncClient, category_id: int, category_name: str
 ) -> list[Product]:
     """Fetch all products for a single category."""
     url = f"{config.BASE_URL}/category/{category_id}/products?ajax=true"
     try:
-        resp = client.get(url)
+        resp = await client.get(url)
         resp.raise_for_status()
         data = resp.json()
         return _parse_products_from_response(data, category_name)

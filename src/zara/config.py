@@ -25,5 +25,12 @@ TIMEZONE = os.environ.get("ZARA_TIMEZONE", "Asia/Tokyo")
 REQUEST_TIMEOUT = int(os.environ.get("ZARA_REQUEST_TIMEOUT", "30"))
 REQUEST_DELAY = float(os.environ.get("ZARA_REQUEST_DELAY", "0.5"))
 
+# Maximum number of concurrent category fetches
+CONCURRENCY = int(os.environ.get("ZARA_CONCURRENCY", "10"))
+
+# Telegram notification (leave empty to disable)
+TG_BOT_TOKEN = os.environ.get("ZARA_TG_BOT_TOKEN", "")
+TG_CHAT_ID = os.environ.get("ZARA_TG_CHAT_ID", "")
+
 # Product listing layouts that contain actual products
 PRODUCT_LAYOUTS = {"products-category-view", "origins-products-category-view"}

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import sys
 
 from loguru import logger
@@ -16,13 +17,16 @@ def _run_scheduler() -> None:
 
     scheduler = BlockingScheduler()
 
+    def _job() -> None:
+        asyncio.run(run_scan())
+
     trigger = CronTrigger(
         hour=config.SCHEDULE_HOUR,
         minute=config.SCHEDULE_MINUTE,
         timezone=config.TIMEZONE,
     )
 
-    scheduler.add_job(run_scan, trigger, id="zara_scan", name="Zara JP Discount Scan")
+    scheduler.add_job(_job, trigger, id="zara_scan", name="Zara JP Discount Scan")
 
     logger.info(
         "Scheduler started. Will run daily at {:02d}:{:02d} ({})",
@@ -31,6 +35,7 @@ def _run_scheduler() -> None:
         config.TIMEZONE,
     )
     logger.info("Discount threshold: >= {}% off", config.DISCOUNT_THRESHOLD)
+    logger.info("Concurrency: {} simultaneous requests", config.CONCURRENCY)
     logger.info("Press Ctrl+C to stop.")
 
     try:
@@ -55,6 +60,12 @@ def main() -> None:
         help=f"Minimum discount percentage to report (default: {config.DISCOUNT_THRESHOLD})",
     )
     parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=None,
+        help=f"Number of concurrent category fetches (default: {config.CONCURRENCY})",
+    )
+    parser.add_argument(
         "--verbose",
         "-v",
         action="store_true",
@@ -68,12 +79,14 @@ def main() -> None:
     level = "DEBUG" if args.verbose else "INFO"
     logger.add(sys.stderr, level=level)
 
-    # Override threshold if provided via CLI
+    # Override config if provided via CLI
     if args.threshold is not None:
         config.DISCOUNT_THRESHOLD = args.threshold
+    if args.concurrency is not None:
+        config.CONCURRENCY = args.concurrency
 
     if args.once:
-        run_scan()
+        asyncio.run(run_scan())
         sys.exit(0)
     else:
         _run_scheduler()

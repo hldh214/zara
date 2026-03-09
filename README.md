@@ -5,8 +5,10 @@ A discount monitor for [Zara Japan](https://www.zara.com/jp/). Scans all product
 ## Features
 
 - Fetches all product categories and items from Zara JP's internal API
+- **Concurrent fetching**: scans multiple categories in parallel (configurable concurrency)
 - Real-time output: prints matching deals as soon as they are found
 - Configurable discount threshold (e.g. only show items >= 30% off)
+- Telegram notifications for matching deals (optional)
 - Built-in scheduler for daily automated scans (default: 7:20 AM JST)
 - Single-run mode for one-off checks
 
@@ -38,6 +40,9 @@ All settings are configured via environment variables in `.env`:
 | `ZARA_TIMEZONE` | `Asia/Tokyo` | Timezone for scheduler |
 | `ZARA_REQUEST_TIMEOUT` | `30` | HTTP request timeout in seconds |
 | `ZARA_REQUEST_DELAY` | `0.5` | Delay between requests in seconds |
+| `ZARA_CONCURRENCY` | `10` | Max concurrent category fetches |
+| `ZARA_TG_BOT_TOKEN` | *(empty)* | Telegram bot token (leave empty to disable) |
+| `ZARA_TG_CHAT_ID` | *(empty)* | Telegram chat ID to send notifications to |
 
 ## Usage
 
@@ -67,6 +72,12 @@ This starts a blocking scheduler that runs a scan daily at the configured time (
 uv run zara --once -v
 ```
 
+### Custom concurrency
+
+```bash
+uv run zara --once --concurrency 20
+```
+
 ## Output
 
 - Regular log messages are printed at `INFO` level
@@ -75,10 +86,21 @@ uv run zara --once -v
 Example:
 
 ```
-2026-03-09 15:26:08 | INFO     | Starting Zara JP discount scan (threshold: >= 50% off)
+2026-03-09 15:26:08 | INFO     | Starting Zara JP discount scan (threshold: >= 50% off, concurrency: 10)
 2026-03-09 15:26:08 | INFO     | Found 746 product categories to scan
 2026-03-09 15:26:10 | SUCCESS  | [WOMAN] ソフトオーバーサイズコート | ¥6,590 (was ¥13,590, -51% off) | https://www.zara.com/jp/ja/...
+2026-03-09 15:26:48 | INFO     | Scan complete in 40s. 12345 unique products scanned, 42 items matched threshold (>= 50% off)
 ```
+
+## Telegram Notifications
+
+To enable Telegram notifications, set `ZARA_TG_BOT_TOKEN` and `ZARA_TG_CHAT_ID` in `.env`:
+
+1. Create a bot via [@BotFather](https://t.me/BotFather) and copy the token
+2. Get your chat ID by sending a message to the bot and visiting `https://api.telegram.org/bot<TOKEN>/getUpdates`
+3. Fill in both values in `.env`
+
+When enabled, each matching deal is sent as an individual message in real-time, followed by a summary when the scan completes. Leave both values empty to disable.
 
 ## License
 
