@@ -10,7 +10,7 @@ Zara JP discount monitor. Scans all product categories on zara.com/jp via their 
 - **HTTP client:** httpx (async)
 - **Logging:** loguru
 - **Config:** python-dotenv + `.env`
-- **Scheduler:** APScheduler 3.x
+- **Scheduling:** system crontab (no in-process scheduler)
 
 ## Build / Run Commands
 
@@ -19,19 +19,16 @@ Zara JP discount monitor. Scans all product categories on zara.com/jp via their 
 uv sync
 
 # Run a single scan
-uv run zara --once
+uv run zara
 
 # Run with custom threshold and concurrency
-uv run zara --once --threshold 50 --concurrency 20
-
-# Run daily scheduler (blocks, default 7:20 AM JST)
-uv run zara
+uv run zara --threshold 50 --concurrency 20
 
 # Import check (no test suite exists yet)
 uv run python -c "from zara.cli import main"
 ```
 
-There are **no tests, no linter config, no type checker config, no CI/CD** in this repo. Validate changes by running `uv run python -c "from zara.cli import main"` to confirm imports, and optionally `uv run zara --once --threshold 99` for a quick live smoke test.
+There are **no tests, no linter config, no type checker config, no CI/CD** in this repo. Validate changes by running `uv run python -c "from zara.cli import main"` to confirm imports, and optionally `uv run zara --threshold 99` for a quick live smoke test.
 
 ## Code Style
 
