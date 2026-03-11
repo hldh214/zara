@@ -9,8 +9,7 @@ A discount monitor for [Zara Japan](https://www.zara.com/jp/). Scans all product
 - Real-time output: prints matching deals as soon as they are found
 - Configurable discount threshold (e.g. only show items >= 30% off)
 - Telegram notifications for matching deals (optional)
-- Built-in scheduler for daily automated scans (default: 7:20 AM JST)
-- Single-run mode for one-off checks
+- Designed for crontab: runs once and exits, no resident process needed
 
 ## Requirements
 
@@ -35,9 +34,6 @@ All settings are configured via environment variables in `.env`:
 |---|---|---|
 | `ZARA_DISCOUNT_THRESHOLD` | `30` | Minimum discount % to report |
 | `ZARA_BASE_URL` | `https://www.zara.com/jp/ja` | Zara API base URL |
-| `ZARA_SCHEDULE_HOUR` | `7` | Scheduler hour (24h) |
-| `ZARA_SCHEDULE_MINUTE` | `20` | Scheduler minute |
-| `ZARA_TIMEZONE` | `Asia/Tokyo` | Timezone for scheduler |
 | `ZARA_REQUEST_TIMEOUT` | `30` | HTTP request timeout in seconds |
 | `ZARA_REQUEST_DELAY` | `0.5` | Delay between requests in seconds |
 | `ZARA_CONCURRENCY` | `10` | Max concurrent category fetches |
@@ -46,36 +42,56 @@ All settings are configured via environment variables in `.env`:
 
 ## Usage
 
-### Single scan
-
-```bash
-uv run zara --once
-```
-
-### Single scan with custom threshold
-
-```bash
-uv run zara --once --threshold 50
-```
-
-### Run as a daily scheduler
+### Run a scan
 
 ```bash
 uv run zara
 ```
 
-This starts a blocking scheduler that runs a scan daily at the configured time (default 7:20 AM JST).
+### Custom threshold
+
+```bash
+uv run zara --threshold 50
+```
 
 ### Verbose output
 
 ```bash
-uv run zara --once -v
+uv run zara -v
 ```
 
 ### Custom concurrency
 
 ```bash
-uv run zara --once --concurrency 20
+uv run zara --concurrency 20
+```
+
+### Scheduled daily scan via crontab
+
+The recommended way to run daily scans is via system crontab. This avoids keeping a process resident in memory.
+
+```bash
+crontab -e
+```
+
+Add the following line to run at 7:20 AM JST every day:
+
+```cron
+20 7 * * * cd /path/to/zara && /path/to/.venv/bin/zara >> /path/to/zara/scan.log 2>&1
+```
+
+For example, if the project is at `/root/code/zara`:
+
+```cron
+20 7 * * * cd /root/code/zara && /root/code/zara/.venv/bin/zara >> /root/code/zara/scan.log 2>&1
+```
+
+> **Tip**: Make sure the server timezone is set to `Asia/Tokyo` (JST), or adjust the cron schedule accordingly. Check with `timedatectl` or `date`.
+
+To verify the crontab is installed:
+
+```bash
+crontab -l
 ```
 
 ## Output

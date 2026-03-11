@@ -10,48 +10,10 @@ from zara import config
 from zara.scanner import run_scan
 
 
-def _run_scheduler() -> None:
-    """Start the APScheduler blocking scheduler for daily scans."""
-    from apscheduler.schedulers.blocking import BlockingScheduler
-    from apscheduler.triggers.cron import CronTrigger
-
-    scheduler = BlockingScheduler()
-
-    def _job() -> None:
-        asyncio.run(run_scan())
-
-    trigger = CronTrigger(
-        hour=config.SCHEDULE_HOUR,
-        minute=config.SCHEDULE_MINUTE,
-        timezone=config.TIMEZONE,
-    )
-
-    scheduler.add_job(_job, trigger, id="zara_scan", name="Zara JP Discount Scan")
-
-    logger.info(
-        "Scheduler started. Will run daily at {:02d}:{:02d} ({})",
-        config.SCHEDULE_HOUR,
-        config.SCHEDULE_MINUTE,
-        config.TIMEZONE,
-    )
-    logger.info("Discount threshold: >= {}% off", config.DISCOUNT_THRESHOLD)
-    logger.info("Concurrency: {} simultaneous requests", config.CONCURRENCY)
-    logger.info("Press Ctrl+C to stop.")
-
-    try:
-        scheduler.start()
-    except (KeyboardInterrupt, SystemExit):
-        logger.info("Scheduler stopped.")
-
-
 def main() -> None:
+    """Run a single Zara JP discount scan."""
     parser = argparse.ArgumentParser(
         description="Zara JP discount monitor - find sale items on zara.com/jp",
-    )
-    parser.add_argument(
-        "--once",
-        action="store_true",
-        help="Run a single scan immediately and exit (no scheduler)",
     )
     parser.add_argument(
         "--threshold",
@@ -85,11 +47,7 @@ def main() -> None:
     if args.concurrency is not None:
         config.CONCURRENCY = args.concurrency
 
-    if args.once:
-        asyncio.run(run_scan())
-        sys.exit(0)
-    else:
-        _run_scheduler()
+    asyncio.run(run_scan())
 
 
 if __name__ == "__main__":
